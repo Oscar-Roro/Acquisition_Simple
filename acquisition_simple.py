@@ -12,11 +12,16 @@ from pyAndorSDK3 import AndorSDK3
 import skimage.io
 import skimage.exposure
 from matplotlib.animation import FuncAnimation
+from skimage.morphology import remove_small_objects as rmv
 from skimage.measure import label, regionprops
 
 plt.close("all")
 timestr = time.strftime("%Y-%m-%d_%H-%M")
 print("Fecha:", timestr)
+# --- Some PARAMETERS
+THRESHOLD = 106
+CONNECTIVITY = 2
+MIN_SIZE_CLUSTER = 9
 
 prismWollas = ""#  input("¿ Has puesto el prisma ? : ").strip()
 estudio = "si Heat/si PBS"
@@ -49,9 +54,10 @@ def process_image(acquisition, width, height):
     acquisition._np_data = img
     return acquisition
 
-def count_clusters(img, thr):
+def count_clusters(img, thr, connectivity_= CONNECTIVITY, min_size_= MIN_SIZE_CLUSTER,thr=THRESHOLD):
     mask = img > thr
-    labeled = label(mask, connectivity=2)
+    labeled = rmv(mask, min_size=min_size_)
+    labeled = label(mask, connectivity=connectivity_)
     return labeled.max()
 
 def custom_acquire_series(cam, frame_count, width, height):
@@ -105,9 +111,8 @@ def live_image(cam, frame_count, width, height):
         cam.flush()
     return acq._np_data
 
-def live_projection(cam,frame_count,width,height):
+def live_projection(cam,frame_count,width,height,thresh=THRESHOLD):
     fig,ax_img = plt.subplots(1,1,figsize=(8,8))
-    thresh = 103
     img = live_image(cam,frame_count,width,height)
     img = img > thresh
     display = ax_img.imshow(img, origin="lower",cmap="gray")
@@ -137,7 +142,7 @@ def normalize_im(im):
     im_norm = (im - im.min()) / (im.max() - im.min())
     return im_norm
 
-def plot_and_save_first_frame(acqs, gain, exposure, gate_width_sec, threshold, ZOOM=False):
+def plot_and_save_first_frame(acqs, gain, exposure, gate_width_sec, thresh_val=THRESHOLD, connectivity_=CONNECTIVITY, min_size_= MIN_SIZE_CLUSTER, ZOOM=False):
     if not acqs:
         print("No hay frames para mostrar.")
         return
@@ -150,10 +155,11 @@ def plot_and_save_first_frame(acqs, gain, exposure, gate_width_sec, threshold, Z
     plt.subplots_adjust(left=0.1, bottom=0.25, wspace=0.4)
 
     # --- Initial image ---
-    thresh_val = threshold
     thresh_im = img > thresh_val
     im_display = ax_img.imshow(thresh_im, origin="lower", cmap="gray")
-    counts = label(thresh_im, connectivity=2)
+
+    counts = rmv(thresh_im, min_size = min_size_)
+    counts = label(counts, connectivity = connectivity_)
     ax_img.set_title(f"Thresholded image (thr={thresh_val}), counts={counts.max()}")
 
     if ZOOM:
@@ -189,7 +195,8 @@ def plot_and_save_first_frame(acqs, gain, exposure, gate_width_sec, threshold, Z
     def update(thresh_val):
         # Update thresholded image
         new_thresh_im = img > thresh_val
-        new_counts = label(new_thresh_im, connectivity=2)
+        new_counts = rmv(new_thresh_im, min_size = min_size_)
+        new_counts = label(new_counts, connectivity = connectivity_)
         im_display.set_data(new_thresh_im)
         ax_img.set_title(f"Thresholded image (thr={thresh_val}), counts={new_counts.max()}")
 
